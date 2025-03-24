@@ -1,25 +1,27 @@
 {
-  "name": "e-society",
-  "version": "1.1.0",
-  "description": "Community management app",
+  "name": "housing-maintenance",
+  "version": "1.0.0",
+  "description": "Housing Maintenance App",
   "main": "server.js",
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "start": "NODE_ENV=production node server.js",
-    "dev": "NODE_ENV=development node server.js"
+    "start": "set NODE_ENV=production&& node server.js",
+    "dev": "set NODE_ENV=development&& node server.js"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/abhijeetpandit7/E-Society.git"
+    "url": "git+https://github.com/Pravesh15/Housing-Maintenance.git"
   },
-  "author": "Abhijeet Pandit",
+  "author": "PraveshDeshbhratar",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/abhijeetpandit7/E-Society/issues"
+    "url": "https://github.com/Pravesh15/Housing-Maintenance/issues"
   },
-  "homepage": "https://github.com/abhijeetpandit7/E-Society#readme",
+  
+  "homepage": "https://github.com/Pravesh15/Housing-Maintenance#readme"
+  
   "dependencies": {
     "connect-mongo": "^5.1.0",
     "dotenv": "^8.2.0",
@@ -27,6 +29,7 @@
     "express": "^4.17.1",
     "express-session": "^1.17.1",
     "lodash": "^4.17.20",
+    "mongodb": "^6.15.0",
     "mongoose": "^8.11.0",
     "passport": "^0.7.0",
     "passport-local-mongoose": "^8.0.0",
