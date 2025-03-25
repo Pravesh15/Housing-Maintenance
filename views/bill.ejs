@@ -1,5 +1,7 @@
 <!-- Maintenance Bill + Payment + Admin accounting section -->
 <%- include('partials/header') %>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script src="/pdf-generator.js"></script>
 <style>
   body {
     background-image: none;
@@ -207,33 +209,51 @@
   <% } %>
 </div>
 
-<script type="text/javascript">
-  // Create an instance of the Stripe object with your publishable API key
-  var stripe = Stripe("pk_test_51ISbSbKm0w4ydVKOdI0dJjnDP1wkND8lSBs02U2bXTT0QX3kRDmLzO38Q6I4SmlsFP3mAaXLAdaFKPhIz2o0axjk00FkI15wzR");
-  var checkoutButton = document.getElementById("checkout-button");
-
-  checkoutButton.addEventListener("click", function () {
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<script>
+document.getElementById("checkout-button").addEventListener("click", function () {
     fetch("/checkout-session", {
-      method: "POST",
+        method: "POST",
     })
-      .then(function (response) {
-        return response.json();
-      })
-      .then(function (session) {
-        return stripe.redirectToCheckout({ sessionId: session.id });
-      })
-      .then(function (result) {
-        // If redirectToCheckout fails due to a browser or network
-        // error, you should display the localized error message to your
-        // customer using error.message.
-        if (result.error) {
-          alert(result.error.message);
-        }
-      })
-      .catch(function (error) {
+    .then((response) => response.json())
+    .then((order) => {
+        const options = {
+            key: '<%= process.env.RAZORPAY_KEY_ID %>', 
+            amount: order.amount,
+            currency: order.currency,
+            name: "<%= society.societyName %>",
+            description: "Society Maintenance Payment",
+            order_id: order.id,
+            handler: function (response) {
+                // Handle successful payment
+                fetch('/payment-success', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(response)
+                })
+                .then(res => {
+                    if(res.ok) {
+                        window.location.href = '/success';
+                    }
+                });
+            },
+            prefill: {
+                name: "<%= resident.firstName %> <%= resident.lastName %>",
+                contact: "<%= resident.phoneNumber %>"
+            },
+            theme: {
+                color: "#3399cc"
+            }
+        };
+        const rzp = new Razorpay(options);
+        rzp.open();
+    })
+    .catch(function (error) {
         console.error("Error:", error);
-      });
-  });
+    });
+});
 </script>
 
 <script>

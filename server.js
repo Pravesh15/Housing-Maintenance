@@ -10,10 +10,15 @@ const society_collection = require("./models/societyModel");
 const visit_collection = require("./models/visitModel");
 const db = require(__dirname+'/config/db');
 const date = require(__dirname+'/date/date');
+const Razorpay = require('razorpay');
+const crypto = require('crypto');
 
 // Access environment variables
 dotenv.config();
-const stripe = require('stripe')(process.env.SECRET_KEY);
+const razorpay = new Razorpay({
+    key_id: process.env.RAZORPAY_KEY_ID,
+    key_secret: process.env.RAZORPAY_KEY_SECRET
+});
 const app = express()
 app.set('view engine','ejs');
 app.use(express.static('public'));
@@ -40,6 +45,9 @@ app.use(
 app.use(passport.initialize());
 app.use(passport.session());
 db.connectDB()
+
+// Initialize passport configuration
+require('./config/passport')(passport);
 
 app.get("/", async (req,res) => {
 	// Track page visits + users & societies registered
@@ -160,19 +168,41 @@ app.get("/residents", async (req,res) => {
         try {
             const userSocietyName = req.user.societyName;
             
-            const allSocietyUsers = await user_collection.User.find({
-              societyName: userSocietyName,
+            // Group users by flatNumber to check for duplicates
+            const allSocietyUsers = await user_collection.User.aggregate([
+                {
+                    $match: {
+                        societyName: userSocietyName
+                    }
+                },
+                {
+                    $group: {
+                        _id: "$flatNumber",
+                        count: { $sum: 1 },
+                        users: { $push: "$$ROOT" }
+                    }
+                },
+                {
+                    $match: {
+                        count: { $gt: 1 }  // Find flats with multiple residents
+                    }
+                }
+            ]);
+
+            // Log duplicate entries if found
+            if(allSocietyUsers.length > 0) {
+                console.log("Duplicate flat numbers found:", allSocietyUsers);
+            }
+
+            // Regular query for display
+            const foundUsers = await user_collection.User.find({
+                societyName: userSocietyName,
+                validation: "approved"
             });
 
-            const foundUsers = [];
-            const foundAppliedUsers = [];
-
-            allSocietyUsers.forEach((user) => {
-              if (user.validation === "approved") {
-                foundUsers.push(user);
-              } else if (user.validation === "applied") {
-                foundAppliedUsers.push(user);
-              }
+            const foundAppliedUsers = await user_collection.User.find({
+                societyName: userSocietyName,
+                validation: "applied"
             });
             
             res.render("residents", {
@@ -446,57 +476,63 @@ app.get("/editProfile", (req,res) => {
     }
 })
 
-app.get('/success', async (req, res) => {
+app.post('/checkout-session', async (req, res) => {
     try {
-        const session = await stripe.checkout.sessions.retrieve(req.query.session_id);
-        const customer = await stripe.customers.retrieve(session.customer);
+        const options = {
+            amount: req.user.makePayment * 100, // amount in paise
+            currency: "INR",
+            receipt: `rcpt_${Date.now()}`,
+            notes: {
+                societyName: req.user.societyName,
+                flatNumber: req.user.flatNumber
+            }
+        };
         
-        const foundUser = await user_collection.User.findOne({_id: req.user.id});
-        foundUser.lastPayment.date = new Date(customer.created*1000);
-        foundUser.lastPayment.amount = session.amount_total/100;
-        foundUser.lastPayment.invoice = customer.invoice_prefix;
-        
-        await foundUser.save();
-        
-        const transactionDate = new Date(customer.created*1000).toLocaleString().split(', ')[0];
-        res.render("success", {
-            invoice: customer.invoice_prefix,
-            amount: session.amount_total/100,
-            date: transactionDate
-        });
+        const order = await razorpay.orders.create(options);
+        res.json(order);
+    } catch(err) {
+        console.error(err);
+        res.status(500).send("Error creating order");
+    }
+});
+
+app.post('/payment-success', async (req, res) => {
+    try {
+        const {
+            razorpay_payment_id,
+            razorpay_order_id,
+            razorpay_signature
+        } = req.body;
+
+        // Verify payment signature
+        const generated_signature = crypto
+            .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+            .update(razorpay_order_id + "|" + razorpay_payment_id)
+            .digest('hex');
+
+        if (generated_signature === razorpay_signature) {
+            const foundUser = await user_collection.User.findOne({_id: req.user.id});
+            foundUser.lastPayment.date = new Date();
+            foundUser.lastPayment.amount = req.user.makePayment;
+            foundUser.lastPayment.invoice = razorpay_order_id;
+            
+            await foundUser.save();
+            
+            res.render("success", {
+                invoice: razorpay_order_id,
+                amount: req.user.makePayment,
+                date: new Date().toLocaleString().split(', ')[0]
+            });
+        } else {
+            res.status(400).send("Payment verification failed");
+        }
     } catch(err) {
         console.error(err);
         res.status(500).send("Server error");
     }
 });
 
-app.post('/checkout-session', async (req, res) => {
-	const session = await stripe.checkout.sessions.create({
-	  payment_method_types: ['card'],
-	  line_items: [
-		{
-		  price_data: {
-			currency: 'inr',
-			product_data: {
-			  name: req.user.societyName,
-			  images: ['https://www.flaticon.com/svg/vstatic/svg/3800/3800518.svg?token=exp=1615226542~hmac=7b5bcc7eceab928716515ebf044f16cd'],
-			},
-			unit_amount: req.user.makePayment*100,
-		  },
-		  quantity: 1,
-		},
-	  ],
-	  mode: 'payment',
-	//   success_url: "http://localhost:3000/success?session_id={CHECKOUT_SESSION_ID}",
-	//   cancel_url: "http://localhost:3000/bill",
-	  success_url: "https://esociety-fdbd.onrender.com/success?session_id={CHECKOUT_SESSION_ID}",
-	  cancel_url: "https://esociety-fdbd.onrender.com/bill",
-	});
-  
-	res.json({ id: session.id });
-  });
-
-  app.post("/approveResident",(req,res) => {
+app.post("/approveResident",(req,res) => {
 	const user_id = Object.keys(req.body.validate)[0]
 	const validate_state = Object.values(req.body.validate)[0]
 	user_collection.User.updateOne(

@@ -1,8 +1,7 @@
 const mongoose = require('mongoose');
 const passportLocalMongoose = require('passport-local-mongoose');
-const passport = require('passport');
 
-const userSchema = new mongoose.Schema (
+const userSchema = new mongoose.Schema(
 	{
 		validation: {
 			type: String,
@@ -47,9 +46,10 @@ const userSchema = new mongoose.Schema (
 	}
 );
 
+// Add compound unique index
+userSchema.index({ societyName: 1, flatNumber: 1 }, { unique: true });
+
 userSchema.plugin(passportLocalMongoose);
-const User = mongoose.model("User",userSchema);
-passport.use(User.createStrategy());
-passport.serializeUser(User.serializeUser());
-passport.deserializeUser(User.deserializeUser());
-exports.User = User
+const User = mongoose.model("User", userSchema);
+
+exports.User = User;
