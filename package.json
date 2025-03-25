@@ -7,8 +7,8 @@
     "node": ">=20"
   },
   "scripts": {
-    "start": "NODE_ENV=production node server.js",
-    "dev": "NODE_ENV=development node server.js"
+    "start": "set NODE_ENV=production&& node server.js",
+    "dev": "set NODE_ENV=development&& node server.js"
   },
   "repository": {
     "type": "git",
@@ -31,6 +31,7 @@
     "mongoose": "^8.11.0",
     "passport": "^0.7.0",
     "passport-local-mongoose": "^8.0.0",
-    "razorpay": "^2.9.6"
+    "razorpay": "^2.9.6",
+    "stripe": "^14.20.0"
   }
 }
